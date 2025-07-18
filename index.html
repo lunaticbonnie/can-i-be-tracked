@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<head>
+  <style>
+    /* reset */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      max-width: 100%;
+      font-family: 'Consolas', monospace;
+    }
+    html, body {width: 100%; height: 100%}
+    /* styles */
+    #app {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    p {
+      margin: 6px 0 2px 0;
+      display: flex;
+      justify-content: flex-start;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    fieldset {
+      border-radius: 8px;
+      width: 100%;
+      padding: 2px 12px 10px 10px;
+    }
+    fieldset > :not(legend) {
+      padding-left: 6px;
+    }
+    legend {
+      padding: 0 6px 0 4px;
+    }
+    [color="red"] {
+      color: hsl(0deg, 60%, 50%);
+    }
+    [color="yellow"] {
+      color: hsl(20deg, 80%, 50%);
+    }
+    [color="green"] {
+      color: hsl(120deg, 60%, 50%);
+    }
+    .table-header-row, .table-row {
+      display: flex;
+    }
+    .table-header-cell, .table-cell {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <fieldset>
+      <div id="benign_headers_table_tag"></div>
+      <legend><b color="green">Benign headers</b></legend>
+    </fieldset>
+    <p><b color="yellow">IP Address</b><span id="ip_tag">...</span></p>
+    <fieldset>
+      <div id="trackable_headers_table_tag"></div>
+      <legend><b color="red">Trackable headers</b></legend>
+    </fieldset>
+  </div>
+  <script>
+    // request utils
+    function get_own_url() {
+      return window.location.origin;
+    }
+    async function get_json(request) {
+      try {
+        const response = await request;
+        return await response.json();
+      } catch {
+        return {};
+      }
+    }
+    /** @param {Record<string, string>} from
+     * @param {Record<string, string>} to
+     * @param {string} key
+     * @param {string | null} value
+    */
+    function steal_header(from, to, key, value) {
+      const from_value = from[key];
+      if (value == null || from_value === value) {
+        delete from[key];
+        to[key] = value;
+      }
+      return from_value;
+    }
+    // element utils
+    const ICONS = {
+      check: "icons/google_icons_check.svg",
+      close: "icons/google_icons_close.svg",
+    }
+    /** @param {number | string} value */
+    function addPx(value) {
+      return typeof value === "number" ? `${value}px` : value;
+    }
+    /** @param {HTMLElement} parent_tag
+     * @param {string} tag_type
+     * @param {ElementOptions} props */
+    function create_element(parent_tag, tag_type, props) {
+      const {className, style} = props;
+      const tag = document.createElement(tag_type);
+      if (className) {tag.className = className}
+      if (style) {
+        for (let key of Object.keys(style)) {
+          const value = style[key];
+          if (value != null) {tag.style[key] = addPx(value)}
+        }
+      }
+      parent_tag.append(tag);
+      return tag;
+    }
+    /** @param {HTMLElement} table_tag
+     * @param {Column[]} columns
+     * @param {string[][]} rows */
+    function make_table(table_tag, columns, rows) {
+      const header_row_tag = create_element(table_tag, "div", {className: "table-header-row"});
+      /*for (let column of columns) {
+        const header_cell_tag = create_element(header_row_tag, "div", {className: "table-header-cell"});
+        header_cell_tag.textContent = column.label;
+      }*/
+      for (let row of rows) {
+        const row_tag = create_element(table_tag, "div", {className: "table-row"});
+        for (let column_index = 0; column_index < columns.length; column_index++) {
+          const column = columns[column_index];
+          const cell = row[column_index];
+          const cell_tag = create_element(row_tag, "div", {
+            className: "table-cell",
+            style: {maxWidth: column.maxWidth},
+          });
+          cell_tag.textContent = cell;
+        }
+      }
+    }
+    // main
+    const async_callback = async () => {
+      const requests = {
+        ip: fetch("https://httpbin.org/ip"),
+        headers: fetch("https://httpbin.org/headers"),
+      };
+      // ip
+      const ip_address = (await get_json(requests.ip))?.origin ?? "";
+      const ip_tag = document.querySelector("#ip_tag");
+      ip_tag.textContent = ip_address;
+      // get default headers
+      const headers = (await get_json(requests.headers))?.headers ?? {};
+      const HEADER_TABLE_COLUMNS = [{maxWidth: 200}, {}];
+      steal_header(headers, {}, "X-Amzn-Trace-Id"); // NOTE: ignore amazon load balancer header
+      // show benign default headers
+      const benign_headers = {};
+      steal_header(headers, benign_headers, "Accept", "*/*");
+      steal_header(headers, benign_headers, "Accept-Encoding", "gzip, deflate, br, zstd");
+      steal_header(headers, benign_headers, "Host", "httpbin.org");
+      steal_header(headers, benign_headers, "Origin", get_own_url());
+      steal_header(headers, benign_headers, "Referer", get_own_url() + "/");
+      steal_header(headers, benign_headers, "Accept", "*/*");
+      steal_header(headers, benign_headers, "Sec-Fetch-Dest", "empty");
+      steal_header(headers, benign_headers, "Sec-Fetch-Mode", "cors");
+      steal_header(headers, benign_headers, "Sec-Fetch-Site", "cross-site");
+      const benign_headers_table_tag = document.querySelector("#benign_headers_table_tag");
+      const benign_headers_table_rows = [...Object.entries(benign_headers)];
+      make_table(benign_headers_table_tag, HEADER_TABLE_COLUMNS, benign_headers_table_rows);
+      // show remaining headers
+      const trackable_headers_table_tag = document.querySelector("#trackable_headers_table_tag");
+      const trackable_headers_table_rows = [...Object.entries(headers)];
+      make_table(trackable_headers_table_tag, HEADER_TABLE_COLUMNS, trackable_headers_table_rows);
+    }
+    async_callback();
+  </script>
+</body>
