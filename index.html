@@ -63,12 +63,20 @@
       <div id="benign_headers_table_tag">...</div>
     </fieldset>
     <fieldset>
-      <legend><b color="yellow">IP Address</b></legend>
+      <legend><b color="red" title="NOTE: We have no way to detect if you're behind Tor or a VPN.">IP Address (?)</b></legend>
       <div id="ip_tag">...</div>
     </fieldset>
     <fieldset>
       <legend><b color="red">Trackable headers</b></legend>
       <div id="trackable_headers_table_tag">...</div>
+    </fieldset>
+    <fieldset>
+      <legend><b color="yellow">Browser name</b></legend>
+      <div id="browser_name_tag">...</div>
+    </fieldset>
+    <fieldset>
+      <legend><b color="yellow">OS name</b></legend>
+      <div id="os_name_tag">...</div>
     </fieldset>
   </div>
   <script>
@@ -108,6 +116,60 @@
       steal_header(headers, benign_headers, "Sec-Fetch-Dest", "empty");
       steal_header(headers, benign_headers, "Sec-Fetch-Mode", "cors");
       steal_header(headers, benign_headers, "Sec-Fetch-Site", "cross-site");
+    }
+    /** @param {Record<string, string>} headers */
+    function get_browser_name(headers) {
+      const {
+        ["User-Agent"]: user_agent = "",
+        ["Sec-Ch-Ua"]: client_hint_user_agent = "",
+        ["Sec-Ch-Ua-Mobile"]: client_hint_user_agent_mobile = "",
+        ["Sec-Gpc"]: secGpc = "",
+      } = headers;
+      let browser_name = "??";
+      if (client_hint_user_agent.includes('"Opera"')) {
+        browser_name = "Opera";
+      } else if (client_hint_user_agent.includes('"Brave"')) {
+        browser_name = "Brave";
+      } else if (client_hint_user_agent.includes('"Microsoft Edge"')) {
+        browser_name = "Microsoft Edge";
+      } else if (secGpc === "1") {
+        browser_name = "Tor Browser";
+      } else if (user_agent.includes("Chrome")) {
+        browser_name = "Chrome";
+      } else if (user_agent.includes("Chromium")) {
+        browser_name = "Chromium";
+      } else if (user_agent.includes("Mozilla")) {
+        browser_name = "Firefox";
+      } else if (user_agent.includes("Safari")) {
+        browser_name = "Safari";
+      }
+      // is_mobile
+      let is_mobile = Boolean(navigator.userAgentData?.mobile);
+      is_mobile ||= user_agent.toLowerCase().includes("mobile");
+      is_mobile ||= client_hint_user_agent_mobile === "?1";
+      return browser_name + (is_mobile ? " (mobile)" : "");
+    }
+    function get_os_name(headers) {
+      // if the browser tells us directly, use that (Firefox-based browsers don't)
+      const platform = navigator.userAgentData?.platform;
+      if (platform) return platform;
+      // parse from the user_agent
+      const {
+        ["User-Agent"]: user_agent = "",
+      } = headers;
+      const user_agent_or_navigator_data = `${user_agent} ${navigator.oscpu || ""}`.toLowerCase();
+      const includes_any = (value, options) => options.some(option => value.includes(option));
+      if (includes_any(user_agent_or_navigator_data, ["android"])) {
+        return "Android";
+      } else if (includes_any(user_agent_or_navigator_data, ["iphone", "ipad", "ipod"])) {
+        return "iOS";
+      } else if (includes_any(user_agent_or_navigator_data, ["macintosh", "macintel", "macppc", "mac68k"])) {
+        return "Mac OS";
+      } else if (includes_any(user_agent_or_navigator_data, ["win32", "win64", "windows", "wince"])) {
+        return "Windows";
+      } else {
+        return "Linux";
+      }
     }
     // element utils
     const ICONS = {
@@ -166,7 +228,7 @@
       // ip
       const ip_address = (await get_json(requests.ip))?.origin ?? "";
       const ip_tag = document.querySelector("#ip_tag");
-      make_table(ip_tag, [{}], [[ip_address]])
+      make_table(ip_tag, [{}], [[ip_address]]);
       // get default headers
       const headers = (await get_json(requests.headers))?.headers ?? {};
       const HEADER_TABLE_COLUMNS = [{maxWidth: 200}, {}];
@@ -181,6 +243,12 @@
       const trackable_headers_table_tag = document.querySelector("#trackable_headers_table_tag");
       const trackable_headers_table_rows = [...Object.entries(headers)];
       make_table(trackable_headers_table_tag, HEADER_TABLE_COLUMNS, trackable_headers_table_rows);
+      // show browser name
+      const browser_name_tag = document.querySelector("#browser_name_tag");
+      make_table(browser_name_tag, [{}], [[get_browser_name(headers)]]);
+      // show OS
+      const os_name_tag = document.querySelector("#os_name_tag");
+      make_table(os_name_tag, [{}], [[get_os_name(headers)]]);
     }
     async_callback();
   </script>
