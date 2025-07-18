@@ -16,6 +16,9 @@
       flex-direction: column;
       gap: 4px;
     }
+    h2 {
+      margin-top: 4px 0;
+    }
     p {
       margin: 6px 0 2px 0;
       display: flex;
@@ -54,14 +57,18 @@
 </head>
 <body>
   <div id="app">
+    <h2>fetch()</h2>
     <fieldset>
-      <div id="benign_headers_table_tag"></div>
       <legend><b color="green">Benign headers</b></legend>
+      <div id="benign_headers_table_tag">...</div>
     </fieldset>
-    <p><b color="yellow">IP Address</b><span id="ip_tag">...</span></p>
     <fieldset>
-      <div id="trackable_headers_table_tag"></div>
+      <legend><b color="yellow">IP Address</b></legend>
+      <div id="ip_tag">...</div>
+    </fieldset>
+    <fieldset>
       <legend><b color="red">Trackable headers</b></legend>
+      <div id="trackable_headers_table_tag">...</div>
     </fieldset>
   </div>
   <script>
@@ -80,8 +87,7 @@
     /** @param {Record<string, string>} from
      * @param {Record<string, string>} to
      * @param {string} key
-     * @param {string | null} value
-    */
+     * @param {string | null} value */
     function steal_header(from, to, key, value) {
       const from_value = from[key];
       if (value == null || from_value === value) {
@@ -89,6 +95,19 @@
         to[key] = value;
       }
       return from_value;
+    }
+    /** @param {Record<string, string>} from
+     * @param {Record<string, string>} to */
+    function steal_benign_headers(headers, benign_headers) {
+      steal_header(headers, benign_headers, "Accept", "*/*");
+      steal_header(headers, benign_headers, "Accept-Encoding", "gzip, deflate, br, zstd");
+      steal_header(headers, benign_headers, "Host", "httpbin.org");
+      steal_header(headers, benign_headers, "Origin", get_own_url());
+      steal_header(headers, benign_headers, "Referer", get_own_url() + "/");
+      steal_header(headers, benign_headers, "Accept", "*/*");
+      steal_header(headers, benign_headers, "Sec-Fetch-Dest", "empty");
+      steal_header(headers, benign_headers, "Sec-Fetch-Mode", "cors");
+      steal_header(headers, benign_headers, "Sec-Fetch-Site", "cross-site");
     }
     // element utils
     const ICONS = {
@@ -119,6 +138,7 @@
      * @param {Column[]} columns
      * @param {string[][]} rows */
     function make_table(table_tag, columns, rows) {
+      table_tag.textContent = ""; // NOTE: clear loading text
       const header_row_tag = create_element(table_tag, "div", {className: "table-header-row"});
       /*for (let column of columns) {
         const header_cell_tag = create_element(header_row_tag, "div", {className: "table-header-cell"});
@@ -146,22 +166,14 @@
       // ip
       const ip_address = (await get_json(requests.ip))?.origin ?? "";
       const ip_tag = document.querySelector("#ip_tag");
-      ip_tag.textContent = ip_address;
+      make_table(ip_tag, [{}], [[ip_address]])
       // get default headers
       const headers = (await get_json(requests.headers))?.headers ?? {};
       const HEADER_TABLE_COLUMNS = [{maxWidth: 200}, {}];
       steal_header(headers, {}, "X-Amzn-Trace-Id"); // NOTE: ignore amazon load balancer header
       // show benign default headers
       const benign_headers = {};
-      steal_header(headers, benign_headers, "Accept", "*/*");
-      steal_header(headers, benign_headers, "Accept-Encoding", "gzip, deflate, br, zstd");
-      steal_header(headers, benign_headers, "Host", "httpbin.org");
-      steal_header(headers, benign_headers, "Origin", get_own_url());
-      steal_header(headers, benign_headers, "Referer", get_own_url() + "/");
-      steal_header(headers, benign_headers, "Accept", "*/*");
-      steal_header(headers, benign_headers, "Sec-Fetch-Dest", "empty");
-      steal_header(headers, benign_headers, "Sec-Fetch-Mode", "cors");
-      steal_header(headers, benign_headers, "Sec-Fetch-Site", "cross-site");
+      steal_benign_headers(headers, benign_headers);
       const benign_headers_table_tag = document.querySelector("#benign_headers_table_tag");
       const benign_headers_table_rows = [...Object.entries(benign_headers)];
       make_table(benign_headers_table_tag, HEADER_TABLE_COLUMNS, benign_headers_table_rows);
